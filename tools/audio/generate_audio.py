@@ -2,12 +2,13 @@
 """Procedural SNES-style audio generator for Puffin Platformer.
 
 All melodies, harmonies and timbres here are original and synthesized from scratch
-(no samples). Output: 32 kHz mono 16-bit WAV + OGG Vorbis (via ffmpeg) into
-res://audio/music and res://audio/sfx.
+(no samples). Output: OGG Vorbis (via ffmpeg, 32 kHz mono) into
+res://audio/music and res://audio/sfx. WAV masters go to a temp dir
+(or $PUFFIN_WAV_DIR) and are not committed.
 
 Usage: python3 tools/audio/generate_audio.py   (needs numpy, scipy, ffmpeg)
 """
-import os, subprocess
+import os, subprocess, tempfile
 import numpy as np
 from scipy.signal import butter, lfilter
 from scipy.io import wavfile
@@ -113,15 +114,30 @@ def snes_color(x):  # gaussian-interp style softening + 15-bit-ish grit
     x = lp(x, 11000, 4)
     return np.round(x * 16384) / 16384
 
-def finish(x, peak=0.85):
-    x = x - np.mean(x); return x / (np.max(np.abs(x)) + 1e-9) * peak
+def finish(x, peak=0.85, fade_in=0.002, fade_out=0.010, rms=None):
+    """Remove DC first, then fade edges to exactly 0, then normalize.
+    fade_in/fade_out=0 leaves an edge untouched (used for the seamless loop).
+    rms: if set, scale to this RMS loudness (capped so the peak never exceeds `peak`)."""
+    x = x - np.mean(x)
+    fi, fo = int(fade_in * SR), int(fade_out * SR)
+    if fi: x[:fi] *= np.linspace(0, 1, fi)
+    if fo: x[-fo:] *= np.linspace(1, 0, fo); x[-1] = 0.0
+    if fi: x[0] = 0.0
+    pk = np.max(np.abs(x)) + 1e-9
+    g = peak / pk
+    if rms is not None: g = min(rms / (np.sqrt(np.mean(x ** 2)) + 1e-9), g)
+    return x * g
+
+WAV_DIR = os.environ.get("PUFFIN_WAV_DIR") or tempfile.mkdtemp(prefix="puffin_wav_")
 
 def save(x, rel, loop=False):
+    """Masters go to WAV_DIR (outside the repo); only the OGG lands in res://."""
     path = os.path.join(ROOT, rel); os.makedirs(os.path.dirname(path), exist_ok=True)
-    wavfile.write(path + ".wav", SR, (np.clip(x, -1, 1) * 32767).astype(np.int16))
-    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", path + ".wav", "-c:a", "libvorbis",
+    wav = os.path.join(WAV_DIR, rel + ".wav"); os.makedirs(os.path.dirname(wav), exist_ok=True)
+    wavfile.write(wav, SR, (np.clip(x, -1, 1) * 32767).astype(np.int16))
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", wav, "-c:a", "libvorbis",
                     "-q:a", "5", path + ".ogg"], check=True)
-    print(f"{rel}: {len(x)/SR:.2f}s")
+    print(f"{rel}: {len(x)/SR:.2f}s  rms={np.sqrt(np.mean(x**2)):.3f} peak={np.max(np.abs(x)):.3f}")
 
 # ---- MUSIC -------------------------------------------------------------------
 def drum_pattern(bars, fill_last=True):
@@ -132,7 +148,7 @@ def drum_pattern(bars, fill_last=True):
     return [("k", k, 1.0), ("s", s, 1.0), ("h", h, 1.0)]
 
 def world1():
-    """'Puffin Cove' - breezy F major seaside tune, 120 bpm shuffle-free 4/4, 16 bars."""
+    """'Puffin Cove' - breezy F major seaside tune, 132 bpm, 4/4, 16 bars."""
     bpm = 132
     prog = [["F3","A3","C4","F2"],["C3","E3","G3","C2"],["D3","F3","A3","D2"],["Bb2","D3","F3","Bb1"],
             ["F3","A3","C4","F2"],["G3","Bb3","D4","G2"],["Bb2","D3","F3","Bb1"],["C3","E3","G3","C2"],
@@ -160,7 +176,7 @@ def world1():
     x, N = render(tracks, bpm, 64)
     x = reverb(x)
     loop = x[:N].copy(); tail = x[N:]; loop[:len(tail)] += tail[:N]  # wrap tail -> seamless loop
-    return finish(snes_color(loop))
+    return finish(snes_color(loop), fade_in=0, fade_out=0)  # seamless: no edge fades
 
 def title():
     """'Northern Wings' - stately C major fanfare into a gentle theme, ends on a held chord."""
@@ -191,8 +207,7 @@ def title():
              [("pad", p, 1.3) for p in pads] + [("k", k, 1), ("s", s, 1), ("h", h, 1)]
     x, N = render(tracks, bpm, 64)
     x = reverb(x, 0.25)[:N + int(2.0 * SR)]
-    fade = int(1.5 * SR); x[-fade:] *= np.linspace(1, 0, fade)
-    return finish(snes_color(x))
+    return finish(snes_color(x), fade_in=0.005, fade_out=1.5)
 
 # ---- SFX ---------------------------------------------------------------------
 def sweep_pulse(f0, f1, dur, duty=0.5, curve="exp"):
@@ -214,7 +229,7 @@ def sfx_death():
     parts = []
     for i, (a, b) in enumerate([(784, 740), (659, 622), (523, 494), (392, 330)]):
         s = sweep_pulse(a, b, 0.14 if i < 3 else 0.5, 0.5); parts.append(s * env(len(s), 0.002, 0.03, 0.7, 0.04))
-    x = np.concatenate([np.zeros(int(0.05*SR))] + parts); return x
+    return np.concatenate(parts)
 def sfx_fish():
     out = []
     for f in (hz(84), hz(91)):
@@ -239,10 +254,14 @@ def sfx_stomp():
 SFX = dict(jump=sfx_jump, land=sfx_land, skid=sfx_skid, death=sfx_death,
            collect_fish=sfx_fish, powerup=sfx_powerup, stomp=sfx_stomp)
 
+TRANSIENT_SFX = {"land", "skid", "stomp"}
+
 if __name__ == "__main__":
     save(title(), "audio/music/title_theme")
     save(world1(), "audio/music/world1_theme", loop=True)
     for name, fn in SFX.items():
         x = fn(); x = reverb(np.concatenate([x, np.zeros(int(0.25 * SR))]), 0.08)
+        if name in TRANSIENT_SFX:  # soft-limit punchy hits so they can match the others' loudness
+            x = np.tanh(4 * x / np.max(np.abs(x)))
         nz = np.nonzero(np.abs(x) > 1e-3)[0]; x = x[: nz[-1] + 1]
-        save(finish(snes_color(x), 0.8), f"audio/sfx/{name}")
+        save(finish(snes_color(x), 0.9, rms=0.16), f"audio/sfx/{name}")  # loudness-matched
