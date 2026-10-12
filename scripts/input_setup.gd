@@ -7,7 +7,7 @@ const KEYS := {
 	"jump": [KEY_SPACE, KEY_Z, KEY_UP, KEY_W],
 	"run": [KEY_SHIFT, KEY_X],
 	"restart": [KEY_R],
-	"pause": [KEY_ESCAPE, KEY_P, KEY_ENTER],
+	"pause": [KEY_ESCAPE, KEY_P],
 }
 const DEADZONE := 0.25
 const PAD := {

@@ -24,6 +24,9 @@ func _run() -> void:
 	ok = ok and paused
 	pm.set_open(false)
 	ok = ok and not paused
+	for ev in InputMap.action_get_events("pause"):
+		if ev is InputEventKey and ev.physical_keycode in [KEY_ENTER, KEY_KP_ENTER]:
+			ok = false
 	gs.lose_life()
 	ok = ok and gs.lives == 3
 	print("UI TEST ", "PASS" if ok else "FAIL")
