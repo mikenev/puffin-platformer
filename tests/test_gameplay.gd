@@ -22,7 +22,12 @@ func press(a: String, on := true) -> void:
 
 func reset_at(pos: Vector2, pw := Puffin.Power.NONE) -> void:
 	for a in ["move_left", "move_right", "jump", "run", "move_down"]: press(a, false)
-	P.respawn(false)
+	P.respawn(false)  # also resets level crabs; clear them so they don't interfere
+	for e in L.get_children():
+		if e is Enemy:
+			e.remove_from_group("enemies")
+			e.queue_free()
+	P._invuln = 0.0
 	P.global_position = pos
 	P.velocity = Vector2.ZERO
 	P.set_power(pw)
@@ -63,9 +68,8 @@ func _run() -> void:
 	var bounce := []
 	for held in [false, true]:
 		Sfx.history.clear()
-		var e := enemy_at(380)
-		await frames(2)
 		await reset_at(Vector2(380, 120))
+		var e := enemy_at(380)
 		var vy_after := 0.0
 		for i in 90:
 			if held and i == 10: press("jump")  # after coyote time, so it is not a jump
@@ -85,8 +89,8 @@ func _run() -> void:
 
 	# Side hit while normal -> death
 	Sfx.history.clear()
-	var e2 := enemy_at(380)
 	await reset_at(Vector2(350, 183))
+	var e2 := enemy_at(380)
 	press("move_right")
 	await frames(40)
 	ok(P.is_dying(), "side hit kills unpowered puffin")
@@ -95,8 +99,8 @@ func _run() -> void:
 	e2.queue_free()
 
 	# Side hit while powered -> depower + invuln, no death
-	var e3 := enemy_at(380)
 	await reset_at(Vector2(350, 183), Puffin.Power.GLIDE)
+	var e3 := enemy_at(380)
 	press("move_right")
 	await frames(40)
 	ok(not P.is_dying() and P.power == Puffin.Power.NONE and P.is_invulnerable(), "powered side hit drops power, survives, invulnerable")
@@ -146,5 +150,56 @@ func _run() -> void:
 	press("move_right"); press("run"); await frames(50); press("move_right", false); press("move_left"); await frames(10)
 	ok(Sfx.history.has("skid"), "skid sfx fired")
 	press("move_left", false); press("run", false)
+
+	# Spawn safety: no crab patrol range within 6 tiles of spawn
+	var lv := L as Node
+	var spawn_x: float = P.spawn_point.x
+	var near := 999.0
+	for sp in lv.ENEMY_SPAWNS:
+		near = minf(near, sp[1] * lv.TILE - spawn_x)
+	ok(near >= 6 * lv.TILE, "closest crab patrol edge is %.0f px (%.1f tiles) from spawn" % [near, near / lv.TILE])
+	# ...and in practice: let the real crabs patrol for 20 s and track the closest approach
+	P.respawn(false)
+	await frames(2)
+	var crabs := L.get_children().filter(func(c): return c is Enemy)
+	var closest := 9999.0
+	for i in 1200:
+		await physics_frame
+		P.global_position = P.spawn_point
+		P._invuln = 1.0  # keep the puffin parked at spawn without dying
+		for c in crabs:
+			if is_instance_valid(c): closest = minf(closest, c.global_position.x - Enemy.SIZE.x / 2.0 - spawn_x)
+	ok(closest >= 6 * 16, "crabs over 20 s stayed %.0f px from spawn" % closest)
+	# Respawn invulnerability
+	await reset_at(Vector2(300, 183))
+	P.respawn(false)
+	ok(P.is_invulnerable(), "invulnerable right after respawn")
+	for e in L.get_children(): if e is Enemy: e.remove_from_group("enemies"); e.queue_free()
+	var e5 := enemy_at(P.spawn_point.x + 6)
+	await frames(30)
+	ok(not P.is_dying(), "enemy touching puffin during respawn invulnerability does not kill")
+	await frames(70)
+	ok(not P.is_invulnerable(), "respawn invulnerability ends after ~1.5 s")
+	e5.queue_free()
+	# Crabs reset on R and on death (stomped ones come back)
+	P.respawn(false)
+	await frames(2)
+	var first := L.get_children().filter(func(c): return c is Enemy and not c.is_queued_for_deletion())
+	var n0 := first.size()
+	first[0].stomp(P)
+	first[1].global_position.x += 40
+	P.respawn(false)
+	await frames(2)
+	var after := L.get_children().filter(func(c): return c is Enemy and not c.is_queued_for_deletion())
+	var at_spawn := true
+	for i in after.size():
+		var sp: Vector2i = lv.ENEMY_SPAWNS[i][0]
+		if absf(after[i].global_position.x - (sp.x * 16 + 8)) > 2: at_spawn = false
+	ok(after.size() == n0 and at_spawn and after.all(func(c): return not c.squashed), "R reset: all %d crabs back at spawn, stomped ones restored" % n0)
+	after[0].stomp(P)
+	P.die()
+	await frames(70)
+	var after2 := L.get_children().filter(func(c): return c is Enemy and not c.is_queued_for_deletion())
+	ok(after2.size() == n0 and after2.all(func(c): return not c.squashed), "death respawn: all crabs restored")
 	print("RESULT: %d failures" % fails)
 	quit(1 if fails else 0)

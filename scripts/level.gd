@@ -30,7 +30,10 @@ const PIT_DEATH_DEPTH := 24.0           ## px the puffin's center must drop belo
 const HUD_TEXT := "M1 move:arrows run:X jump:Z R:reset"
 
 ## Gameplay spawns (tile coords). Enemies stand on the ground row; fish float 1 tile above a surface.
-const ENEMY_SPAWNS := [Vector2i(14, 11), Vector2i(50, 11), Vector2i(62, 11), Vector2i(78, 11), Vector2i(100, 11), Vector2i(118, 11)]
+## Each crab: [spawn tile, patrol min column, patrol max column]. Patrols stay 6+ tiles from
+## spawn and off the gap landing zones (c29-30, c44-46, c58-63, c86-91).
+const ENEMY_SPAWNS := [[Vector2i(18, 11), 12, 25], [Vector2i(50, 11), 48, 53], [Vector2i(70, 11), 64, 81],
+	[Vector2i(100, 11), 92, 115], [Vector2i(124, 11), 116, 134]]
 const FISH_SPAWNS := [[Vector2i(18, 8), 1], [Vector2i(70, 7), 2], [Vector2i(96, 7), 1], [Vector2i(124, 11), 2]]
 
 var level_size := Vector2.ZERO
@@ -80,21 +83,35 @@ func _ready() -> void:
 	add_child(cam)
 	cam.make_current()
 	_player.respawned.connect(cam.snap_to_target)
+	_player.respawned.connect(_reset_enemies)
 	cam.snap_to_target()
 	_add_hud()
 	_spawn_gameplay()
 	Sfx.music("world1_theme")
 
 func _spawn_gameplay() -> void:
-	for t: Vector2i in ENEMY_SPAWNS:
-		var e := Enemy.new()
-		e.position = Vector2(t.x * TILE + TILE / 2.0, (t.y + 1) * TILE - Enemy.SIZE.y / 2.0)
-		add_child(e)
+	_spawn_enemies()
 	for f in FISH_SPAWNS:
 		var fish := FishPickup.new()
 		fish.power = f[1]
 		fish.position = Vector2(f[0].x * TILE + TILE / 2.0, f[0].y * TILE + TILE / 2.0)
 		add_child(fish)
+
+func _spawn_enemies() -> void:
+	for s in ENEMY_SPAWNS:
+		var t: Vector2i = s[0]
+		var e := Enemy.new()
+		e.position = Vector2(t.x * TILE + TILE / 2.0, (t.y + 1) * TILE - Enemy.SIZE.y / 2.0)
+		e.patrol_min_x = s[1] * TILE
+		e.patrol_max_x = (s[2] + 1) * TILE
+		add_child(e)
+
+## On death or R: every crab (stomped ones too) goes back to its spawn.
+func _reset_enemies() -> void:
+	for e in get_tree().get_nodes_in_group("enemies"):
+		e.remove_from_group("enemies")
+		e.queue_free()
+	_spawn_enemies()
 
 func _add_block(r: Rect2, kind: String) -> void:
 	var body := StaticBody2D.new()

@@ -15,6 +15,9 @@ const SQUASH_TIME := 0.35
 @export var speed := 28.0
 @export var gravity := 900.0
 var dir := -1
+## Patrol bounds in px (left/right edge the body may reach); INF = only walls/ledges.
+var patrol_min_x := -INF
+var patrol_max_x := INF
 var squashed := false
 var _sprite := AnimatedSprite2D.new()
 
@@ -38,6 +41,10 @@ func _physics_process(delta: float) -> void:
 	velocity.y = minf(velocity.y + gravity * delta, 300.0)
 	if is_on_floor() and (is_on_wall() or not _floor_ahead()):
 		dir = -dir
+	if dir < 0 and global_position.x - SIZE.x / 2.0 <= patrol_min_x:
+		dir = 1
+	elif dir > 0 and global_position.x + SIZE.x / 2.0 >= patrol_max_x:
+		dir = -1
 	velocity.x = speed * dir
 	move_and_slide()
 	_sprite.flip_h = dir > 0

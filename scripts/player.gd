@@ -57,6 +57,7 @@ var _death_t := 0.0
 @export var stomp_bounce_velocity := -200.0
 @export var stomp_bounce_held := -320.0  ## bounce when jump is held on stomp
 @export var hurt_invuln_time := 1.5
+@export var respawn_invuln_time := 1.5
 const POWER_TINT := {0: Color.WHITE, 1: Color8(150, 190, 255), 2: Color8(160, 255, 170)}
 const FLICKER_HZ := 15.0
 var diving := false
@@ -286,7 +287,7 @@ func respawn(fell: bool = true) -> void:
 	global_position = spawn_point
 	velocity = Vector2.ZERO
 	_death_t = 0.0
-	_invuln = 0.0
+	_invuln = respawn_invuln_time  # brief flicker so nothing can hit you right at spawn
 	if fell:
 		set_power(Power.NONE)
 	_jumping = false
