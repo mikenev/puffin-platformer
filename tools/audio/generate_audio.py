@@ -254,6 +254,7 @@ def sfx_stomp():
 SFX = dict(jump=sfx_jump, land=sfx_land, skid=sfx_skid, death=sfx_death,
            collect_fish=sfx_fish, powerup=sfx_powerup, stomp=sfx_stomp)
 
+SFX_TAIL_FADE = 0.025  # 25 ms tail fade on every SFX: avoids Vorbis ringing at the cut
 TRANSIENT_SFX = {"land", "skid", "stomp"}
 
 if __name__ == "__main__":
@@ -264,4 +265,4 @@ if __name__ == "__main__":
         if name in TRANSIENT_SFX:  # soft-limit punchy hits so they can match the others' loudness
             x = np.tanh(4 * x / np.max(np.abs(x)))
         nz = np.nonzero(np.abs(x) > 1e-3)[0]; x = x[: nz[-1] + 1]
-        save(finish(snes_color(x), 0.9, rms=0.16), f"audio/sfx/{name}")  # loudness-matched
+        save(finish(snes_color(x), 0.9, fade_out=SFX_TAIL_FADE, rms=0.16), f"audio/sfx/{name}")  # loudness-matched

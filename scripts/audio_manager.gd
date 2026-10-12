@@ -37,49 +37,73 @@ func _ready() -> void:
 # --- Music ---------------------------------------------------------------------
 
 func play_music(track_name: String, fade := DEFAULT_FADE, restart := false) -> void:
-	if track_name == current_music and _music.playing and not restart:
-		return
 	var stream := _load(MUSIC_DIR, track_name)
 	if stream == null:
 		return
 	# Looping comes from each track's .import settings (world1_theme loops; title_theme
 	# plays once). The shared cached resource is never modified here.
-	var old := _music
-	var new := _music_b if old == _music_a else _music_a
-	current_music = track_name
+	var target := _player_with(stream)
+	if target == _music and current_music == track_name and not restart \
+			and is_equal_approx(target.volume_db, 0.0) and not _tween_running():
+		return  # already playing at full volume
 	_kill_tween()
-	new.stream = stream
-	new.volume_db = SILENT_DB if fade > 0.0 and old.playing else 0.0
-	new.play()
-	_music = new
-	if fade > 0.0 and old.playing:
-		_fade_tween = create_tween().set_parallel(true)
-		_fade_tween.tween_property(new, "volume_db", 0.0, fade).set_trans(Tween.TRANS_SINE)
-		_fade_tween.tween_property(old, "volume_db", SILENT_DB, fade).set_trans(Tween.TRANS_SINE)
-		_fade_tween.chain().tween_callback(old.stop)
-	else:
-		old.stop()
+	if target == null:
+		# Reuse the quieter/idle player; the other keeps playing and fades out below.
+		var other := _other(_music)
+		target = other if (not other.playing or other.volume_db <= _music.volume_db) else _music
+		target.stop()
+		target.stream = stream
+		target.volume_db = SILENT_DB if fade > 0.0 else 0.0
+		target.play()
+	elif restart:
+		target.seek(0.0)
+	# else: the track is already on a player (maybe mid-fade): keep its position and
+	# fade it up from its current volume.
+	_music = target
+	current_music = track_name
+	_fade_players(fade, target)
 
 func stop_music(fade := DEFAULT_FADE) -> void:
 	current_music = ""
 	_kill_tween()
-	var p := _music
-	if fade > 0.0 and p.playing:
-		_fade_tween = create_tween()
-		_fade_tween.tween_property(p, "volume_db", SILENT_DB, fade)
-		_fade_tween.tween_callback(p.stop)
-	else:
-		p.stop()
-	var other := _music_b if p == _music_a else _music_a
-	other.stop()
+	_fade_players(fade, null)
 
+## Fade `keep` up to 0 dB and every other playing music player down (then stop it),
+## each from its current volume. keep == null fades everything out.
+func _fade_players(fade: float, keep: AudioStreamPlayer) -> void:
+	if fade <= 0.0:
+		for p in [_music_a, _music_b]:
+			if p == keep:
+				p.volume_db = 0.0
+			else:
+				p.stop()
+		return
+	_fade_tween = create_tween().set_parallel(true)
+	for p: AudioStreamPlayer in [_music_a, _music_b]:
+		if p == keep:
+			_fade_tween.tween_property(p, "volume_db", 0.0, fade).set_trans(Tween.TRANS_SINE)
+		elif p.playing:
+			_fade_tween.tween_property(p, "volume_db", SILENT_DB, fade).set_trans(Tween.TRANS_SINE)
+			_fade_tween.tween_callback(p.stop).set_delay(fade)
+
+func _player_with(stream: AudioStream) -> AudioStreamPlayer:
+	for p in [_music_a, _music_b]:
+		if p.playing and p.stream == stream:
+			return p
+	return null
+
+func _other(p: AudioStreamPlayer) -> AudioStreamPlayer:
+	return _music_b if p == _music_a else _music_a
+
+func _tween_running() -> bool:
+	return _fade_tween != null and _fade_tween.is_valid() and _fade_tween.is_running()
+
+## Stops the current fade where it is. Never stops a player: whatever is playing
+## keeps its position and volume, and the next _fade_players() continues from there.
 func _kill_tween() -> void:
 	if _fade_tween and _fade_tween.is_valid():
 		_fade_tween.kill()
-	# Stop any player left half-faded by an interrupted crossfade.
-	for p in [_music_a, _music_b]:
-		if p != _music:
-			p.stop()
+	_fade_tween = null
 
 # --- SFX -----------------------------------------------------------------------
 
@@ -104,27 +128,33 @@ func _free_voice() -> AudioStreamPlayer:
 
 ## Linear volume, 0.0 (silent) .. 1.0 (unity).
 func set_bus_volume(bus_name: String, linear: float) -> void:
-	var i := AudioServer.get_bus_index(bus_name)
+	var i := _bus_index(bus_name)
 	if i != -1:
 		AudioServer.set_bus_volume_db(i, linear_to_db(clampf(linear, 0.0, 1.0)))
 
 func set_bus_volume_db(bus_name: String, db: float) -> void:
-	var i := AudioServer.get_bus_index(bus_name)
+	var i := _bus_index(bus_name)
 	if i != -1:
 		AudioServer.set_bus_volume_db(i, db)
 
 func get_bus_volume(bus_name: String) -> float:
-	var i := AudioServer.get_bus_index(bus_name)
+	var i := _bus_index(bus_name)
 	return db_to_linear(AudioServer.get_bus_volume_db(i)) if i != -1 else 0.0
 
 func set_bus_mute(bus_name: String, muted: bool) -> void:
-	var i := AudioServer.get_bus_index(bus_name)
+	var i := _bus_index(bus_name)
 	if i != -1:
 		AudioServer.set_bus_mute(i, muted)
 
 func is_bus_muted(bus_name: String) -> bool:
-	var i := AudioServer.get_bus_index(bus_name)
+	var i := _bus_index(bus_name)
 	return AudioServer.is_bus_mute(i) if i != -1 else false
+
+func _bus_index(bus_name: String) -> int:
+	var i := AudioServer.get_bus_index(bus_name)
+	if i == -1:
+		push_warning("AudioManager: unknown audio bus '%s'" % bus_name)
+	return i
 
 # --- Internals ---------------------------------------------------------------------
 
