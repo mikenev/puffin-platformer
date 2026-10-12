@@ -85,16 +85,19 @@ func _run() -> void:
 	press("move_right")
 	await frames(40)
 	ok(P.is_dying(), "side hit kills unpowered puffin")
-	ok(Sfx.history.has("death"), "death sfx fired")
+	ok(Sfx.history.has("death") and not Sfx.history.has("hurt"), "unpowered hit: death sfx only (no hurt)")
 	ok(not e2.squashed, "side hit does not stomp")
 	e2.queue_free()
 
 	# Side hit while powered -> depower + invuln, no death
 	await reset_at(Vector2(350, 183), Puffin.Power.GLIDE)
 	var e3 := enemy_at(380)
+	Sfx.history.clear()
 	press("move_right")
 	await frames(40)
 	ok(not P.is_dying() and P.power == Puffin.Power.NONE and P.is_invulnerable(), "powered side hit drops power, survives, invulnerable")
+	ok(Sfx.history.count("hurt") == 1 and not Sfx.history.has("death"), "powered hit plays hurt sfx once (no death)")
+	ok(ResourceLoader.exists("res://audio/sfx/hurt.ogg"), "sfx asset exists: hurt")
 	e3.queue_free()
 
 	# Fish grant powers

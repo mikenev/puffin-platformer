@@ -251,8 +251,27 @@ def sfx_stomp():
     pop = sweep_pulse(600, 1200, 0.18, 0.5) * np.exp(-tt * 25) * 0.4
     return body + click * 0.6 + pop
 
+def sfx_hurt():
+    """Hurt / power-down: a wobbling pulse that tumbles down in uneven steps,
+    with a short noise 'ouch' transient at the hit."""
+    steps = [(79, 74), (75, 70), (72, 66), (68, 61), (63, 56)]
+    out = []
+    for i, (a, b) in enumerate(steps):
+        dur = 0.075 if i < len(steps) - 1 else 0.22
+        n = int(dur * SR)
+        hi, lo = hz(a), hz(b)
+        half = n // 2
+        seg = np.concatenate([sweep_pulse(hi, hi * 0.97, half / SR, 0.5),
+                              sweep_pulse(lo, lo * 0.94, (n - half) / SR, 0.25)])[:n]
+        seg = seg * 0.7 + tri(lo / 2, len(seg)) * 0.3
+        out.append(seg * env(len(seg), 0.002, 0.02, 0.85, 0.015 if i < len(steps) - 1 else 0.15))
+    x = np.concatenate(out)
+    hit = int(0.04 * SR)
+    x[:hit] += lp(noise(hit), 3500) * np.exp(-t_(hit) * 80) * 0.8
+    return x
+
 SFX = dict(jump=sfx_jump, land=sfx_land, skid=sfx_skid, death=sfx_death,
-           collect_fish=sfx_fish, powerup=sfx_powerup, stomp=sfx_stomp)
+           collect_fish=sfx_fish, powerup=sfx_powerup, stomp=sfx_stomp, hurt=sfx_hurt)
 
 SFX_TAIL_FADE = 0.025  # 25 ms tail fade on every SFX: avoids Vorbis ringing at the cut
 TRANSIENT_SFX = {"land", "skid", "stomp"}

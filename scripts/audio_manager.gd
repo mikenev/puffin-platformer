@@ -12,6 +12,7 @@ const MUSIC_DIR := "res://audio/music/"
 const SFX_DIR := "res://audio/sfx/"
 const SFX_VOICES := 8
 const DEFAULT_FADE := 0.6
+const EXIT_MIX_GRACE_MS := 150
 const SILENT_DB := -60.0
 
 var _music_a := AudioStreamPlayer.new()
@@ -22,6 +23,7 @@ var _sfx_players: Array[AudioStreamPlayer] = []
 var _next_voice := 0
 var _cache := {}
 var current_music := ""
+var _is_shut_down := false
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -33,6 +35,42 @@ func _ready() -> void:
 		p.bus = _bus_or_master("SFX")
 		add_child(p)
 		_sfx_players.append(p)
+
+# --- Shutdown --------------------------------------------------------------------
+# Tear everything down on exit so headless/--quit-after runs and window close
+# don't report leaked ObjectDB instances or resources still in use.
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST or what == NOTIFICATION_PREDELETE:
+		_shutdown()
+
+func _exit_tree() -> void:
+	_shutdown()
+
+func _shutdown() -> void:
+	if _is_shut_down:
+		return
+	_is_shut_down = true
+	_kill_tween()
+	current_music = ""
+	var was_playing := false
+	var all: Array[AudioStreamPlayer] = [_music_a, _music_b]
+	all.append_array(_sfx_players)
+	for p in all:
+		if is_instance_valid(p):
+			was_playing = was_playing or p.stream != null  # `playing` is already false once children exit the tree
+			p.stop()
+			p.stream = null
+			if p.get_parent() == self:
+				remove_child(p)
+			p.free()
+	_sfx_players.clear()
+	_cache.clear()
+	# The audio thread releases a stopped stream's playback (and its stream ref) on
+	# its next mix pass. At engine teardown (e.g. --quit-after) no further frames run,
+	# so give the mixer a brief moment; otherwise Godot reports leaked playbacks.
+	if was_playing:
+		OS.delay_msec(EXIT_MIX_GRACE_MS)
 
 # --- Music ---------------------------------------------------------------------
 

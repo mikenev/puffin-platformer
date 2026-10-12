@@ -229,10 +229,11 @@ func hurt() -> void:
 	if is_dying() or is_invulnerable():
 		return
 	if power != Power.NONE:
+		Sfx.play("hurt")
 		set_power(Power.NONE)
 		_invuln = hurt_invuln_time
 	else:
-		die()
+		die()  # death sound only; layering hurt on top of it muddies the cue
 
 ## Called by an enemy we landed on. Holding jump gives the higher bounce.
 func stomp_bounce() -> void:
