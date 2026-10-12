@@ -8,3 +8,4 @@ export_credentials.cfg
 build/*
 !build/.gdignore
 .DS_Store
+__pycache__/
