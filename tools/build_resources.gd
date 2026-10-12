@@ -19,7 +19,13 @@ func _init() -> void:
 			at.region = Rect2(i * 16, row * 16, 16, 16)
 			sf.add_frame(anim, at)
 		row += 1
-	print("SpriteFrames save: ", ResourceSaver.save(sf, "res://art/puffin/puffin_frames.tres"))
+	var path := "res://art/puffin/puffin_frames.tres"
+	print("SpriteFrames save: ", ResourceSaver.save(sf, path))
+	# Godot writes loop as 0/1 inside the animation dictionaries; store real booleans instead.
+	var txt := FileAccess.get_file_as_string(path).replace("\"loop\": 0,", "\"loop\": false,").replace("\"loop\": 1,", "\"loop\": true,")
+	var f := FileAccess.open(path, FileAccess.WRITE)
+	f.store_string(txt)
+	f.close()
 
 	var ts := TileSet.new()
 	ts.tile_size = Vector2i(16, 16)

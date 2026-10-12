@@ -6,7 +6,7 @@ from PIL import Image, ImageDraw
 
 PAL = {
     "o": (22, 20, 38), "K": (46, 42, 66), "k": (84, 80, 112), "W": (244, 240, 226),
-    "w": (186, 186, 204), "G": (150, 150, 176), "E": (10, 8, 18), "Y": (252, 206, 64),
+    "w": (196, 196, 212), "G": (150, 150, 176), "B": (112, 128, 160), "E": (10, 8, 18), "Y": (252, 206, 64),
     "O": (238, 112, 34), "R": (196, 44, 52), "F": (248, 124, 44), "f": (176, 70, 34),
 }
 # Tile palette (shares outline/whites with the puffin for cohesion)
@@ -22,26 +22,25 @@ T = {
 IDLE = [
     "................",
     "................",
-    "................",
-    "....ooooo.......",
-    "...oKKKKKo......",
-    "..oKWWWWWKo.....",
-    "..oKWGEWWWYOo...",
-    "..oKWWGWWROOOo..",
-    "..oKKWWWWRRoo...",
-    "..oKKKWWWKo.....",
-    ".okkKKWWWWKo....",
+    "....oooooo......",
+    "...oKKKKKKo.....",
+    "..oKWWWWWWKoo...",
+    "..oKWGEWWWBOOo..",
+    "..oKWWGWWWBORRo.",
+    "..oKWWWWWWBORo..",
+    "..oKKWWWWKBRo...",
+    "..oKKKKKKKoo....",
+    ".okkKWWWWWKo....",
     ".okkKWWWWWWo....",
-    ".okKKWWWWwKo....",
-    "..oKKwWWwwKo....",
+    ".okKKWWWWWWo....",
+    "..oKKwWWWwKo....",
     "...ooKKKKoo.....",
     "....FF..FF......",
 ]
 
 def grid(rows): return [list(r) for r in rows]
-def body(g): return g[:15]
 def with_feet(g, feet):
-    g = [r[:] for r in g]; g[15] = list(feet.ljust(16, ".")); return g
+    g = [r[:] for r in g]; g[15] = list(feet.ljust(16, ".")[:16]); return g
 def shift(g, dy, dx=0, rows=range(0, 15)):
     out = [r[:] for r in g]
     for y in rows: out[y] = ["."] * 16
@@ -54,33 +53,44 @@ def put(g, pts):
     g = [r[:] for r in g]
     for x, y, c in pts: g[y][x] = c
     return g
+def clear_wing(g):  # remove the folded wing (cols 1-2, rows 10-12) -> back plumage
+    return put(g, [(1, 10, "."), (1, 11, "."), (1, 12, "."), (2, 10, "o"), (2, 11, "o"), (2, 12, "o")])
+def wing_up(g, dy=0):   # wing raised behind the back
+    g = clear_wing(g)
+    return put(g, [(1, 6 + dy, "o"), (0, 7 + dy, "o"), (1, 7 + dy, "k"), (0, 8 + dy, "o"), (1, 8 + dy, "k"),
+                   (2, 8 + dy, "k"), (1, 9 + dy, "o"), (2, 9 + dy, "k")])
+def wing_down(g):       # wing swept down/back
+    g = clear_wing(g)
+    return put(g, [(1, 11, "o"), (0, 12, "o"), (1, 12, "k"), (0, 13, "o"), (1, 13, "k"), (1, 14, "o"), (2, 12, "k")])
 
 base = grid(IDLE)
-blink = put(base, [(6, 6, "o"), (5, 6, "W")])
-idle = [base, base, shift(base, 1, rows=range(0, 15)), base, blink, base]
-# run: body bob + alternating feet + wing swing
-wing_up = put(base, [(1, 10, "o"), (1, 11, "k"), (0, 10, "o"), (0, 9, "o"), (1, 9, "k")])
+blink = put(base, [(6, 5, "o"), (6, 6, "W")])
+breath = shift(base, 1, rows=range(2, 15))
+idle = [base, base, breath, breath, blink, base]
+# run: forward lean (head/upper body pushed +1px), bob, flapping wing, long stride
+lean = shift(base, 0, 1, rows=range(2, 10))
+lean = put(lean, [(3, y, "o") for y in range(4, 10)] + [(2, y, ".") for y in range(4, 9)])
 run = [
-    with_feet(shift(base, 0), "...FF....FF"),
-    with_feet(shift(wing_up, 1), ".....FFF"),
-    with_feet(shift(base, 0), "..FF......FF"),
-    with_feet(shift(wing_up, 1), "....FFf"),
+    with_feet(wing_up(lean), "..fF......FF"),
+    with_feet(shift(wing_down(lean), 1), ".....FFFF"),
+    with_feet(wing_up(lean, 1), "...FF....Ff"),
+    with_feet(shift(wing_down(lean), 1), "....FFFF"),
 ]
-run[1][14] = list("...ooKKKKoo.....") if False else run[1][14]
-# skid: lean back (top shifted left), feet braced forward
-sk = shift(base, 0, -1, rows=range(3, 10))
-sk = put(sk, [(0, 9, "o"), (0, 10, "o"), (1, 9, "k")])
-skid = [with_feet(sk, "......FFFf"), with_feet(sk, ".....FFFf")]
-# jump: wings raised, feet tucked
-jp = put(base, [(0, 7, "o"), (1, 7, "k"), (1, 8, "k"), (0, 8, "o"), (1, 6, "o"), (1, 10, "K"), (1, 11, "K")])
-jump = [with_feet(shift(jp, -1), "....FfFf"), with_feet(shift(jp, -1), "....fF.Ff")]
-# fall: wings flared down/out, feet dangling
-fl = put(base, [(0, 11, "o"), (0, 12, "o"), (1, 12, "k"), (1, 13, "o"), (12, 10, "o"), (12, 11, "o"), (11, 11, "k")])
-fall = [with_feet(fl, "....F..F"), with_feet(fl, "...F....F")]
-# death: X eyes, wings up, then tumble
-dz = put(base, [(5, 5, "E"), (7, 5, "E"), (6, 6, "E"), (5, 7, "E"), (7, 7, "E"), (6, 5, "W"), (6, 7, "W"), (5, 6, "W"), (7, 6, "W")])
-dz = put(dz, [(0, 7, "o"), (1, 7, "k"), (0, 8, "o"), (12, 9, "o"), (12, 8, "o")])
-dz = with_feet(dz, "....F...F")
+# skid: lean back, wing braced out front-ish, feet planted forward
+sk = shift(base, 0, -1, rows=range(2, 10))
+sk = wing_up(sk)
+skid = [with_feet(sk, "......FFFf"), with_feet(shift(sk, 0, 0), ".....FFFf.")]
+# jump: wings up, feet tucked
+jp = shift(wing_up(base, -1), -1)
+def tuck(g, feet):  # feet pulled up under the body (row 14), nothing below
+    g = [r[:] for r in g]; g[14] = list(feet.ljust(16, ".")); g[15] = ["."] * 16; return g
+jump = [tuck(jp, "....FfFf"), tuck(shift(wing_up(base, 0), -1), "....fF.Ff")]
+# fall: wings flared down, feet dangling
+fl = wing_down(base)
+fall = [with_feet(fl, "....F..F"), with_feet(shift(fl, 0), "...F....F")]
+# death: X eyes, open beak, then tumble
+dz = put(base, [(5, 4, "E"), (7, 4, "E"), (6, 5, "E"), (5, 6, "E"), (7, 6, "E"), (6, 4, "W"), (6, 6, "W"), (5, 5, "W"), (7, 5, "W")])
+dz = with_feet(wing_up(dz), "....F...F")
 def rot90(g): return [[g[15 - x][y] for x in range(16)] for y in range(16)]
 death = [dz, dz, rot90(dz), rot90(rot90(dz)), rot90(rot90(rot90(dz))), rot90(rot90(dz))]
 
@@ -328,4 +338,3 @@ if __name__ == "__main__":
         for r, row in enumerate(TILE_NAMES):
             for c, n in enumerate(row):
                 f.write(f"{c} {r} {n} {'solid' if n in SOLID else 'oneway' if n in ONE_WAY else 'none'}\n")
-    print("ok", ps.size, ts.size, pv.size)
