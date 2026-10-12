@@ -8,6 +8,7 @@ config/features=PackedStringArray("4.7", "GL Compatibility")
 
 [autoload]
 InputSetup="*res://scripts/input_setup.gd"
+AudioManager="*res://scripts/audio_manager.gd"
 
 [display]
 window/size/viewport_width=256
@@ -25,3 +26,7 @@ textures/canvas_textures/default_texture_filter=0
 2d/snap/snap_2d_transforms_to_pixel=true
 2d/snap/snap_2d_vertices_to_pixel=true
 environment/defaults/default_clear_color=Color(0.42, 0.68, 0.93, 1)
+
+[audio]
+
+buses/default_bus_layout="res://default_bus_layout.tres"
