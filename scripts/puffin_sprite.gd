@@ -105,6 +105,25 @@ const SKID := [
 	"FF.....FF.......",
 ]
 
+const DEATH := [
+	"................",
+	"..K..KKKK...K...",
+	"..KKKWWWWKKKK...",
+	"...KWEWEWWWK....",
+	"...KWWEWWYOO....",
+	"...KWEWEWRRR....",
+	"...KKWWWWKK.....",
+	"..KKWWWWWWKK....",
+	"..KKWWWWWWKK....",
+	"..KKWWWWWWKK....",
+	"..KKWWWWWWKK....",
+	"..KKWWWWWWK.....",
+	"..KKKWWWWKK.....",
+	"...KKKKKKK......",
+	"...F.....F......",
+	"..FF.....FF.....",
+]
+
 static func _tex(rows: Array) -> ImageTexture:
 	var img := Image.create(16, 16, false, Image.FORMAT_RGBA8)
 	for y in 16:
@@ -115,7 +134,7 @@ static func _tex(rows: Array) -> ImageTexture:
 static func build() -> SpriteFrames:
 	var sf := SpriteFrames.new()
 	sf.remove_animation("default")
-	for anim in [["idle", [IDLE], 1.0], ["run", [RUN1, IDLE, RUN2, IDLE], 12.0], ["jump", [JUMP], 1.0], ["fall", [IDLE], 1.0], ["skid", [SKID], 1.0]]:
+	for anim in [["idle", [IDLE], 1.0], ["run", [RUN1, IDLE, RUN2, IDLE], 12.0], ["jump", [JUMP], 1.0], ["fall", [IDLE], 1.0], ["skid", [SKID], 1.0], ["death", [DEATH], 1.0]]:
 		sf.add_animation(anim[0])
 		sf.set_animation_speed(anim[0], anim[2])
 		for f in anim[1]:
