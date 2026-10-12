@@ -85,7 +85,7 @@ func _physics_process(delta: float) -> void:
 	move_and_slide()
 	if is_on_ceiling() and velocity.y < 0:
 		velocity.y = 0
-	_update_animation()
+	_update_animation(dir)
 
 func _update_horizontal(dir: float, running: bool, delta: float) -> void:
 	var top := run_speed if running else walk_speed
@@ -138,15 +138,15 @@ func _apply_gravity(delta: float) -> void:
 		g = gravity_rise
 	velocity.y = minf(velocity.y + g * delta, max_fall_speed)
 
-func is_skidding() -> bool:
-	var dir := Input.get_axis("move_left", "move_right")
+func is_skidding(dir: float) -> bool:
 	return is_on_floor() and absf(velocity.x) > SKID_MIN_SPEED and dir != 0.0 \
 		and signf(dir) != signf(velocity.x)
 
-func _update_animation() -> void:
-	var skid := is_skidding()
+func _update_animation(dir: float) -> void:
+	var skid := is_skidding(dir)
 	_dust.emitting = skid
-	# Skid pose: face against the motion (toward input), like SMB's skid turn.
+	# While skidding, `facing` already points toward the pressed direction (opposite the
+	# slide), so the skid sprite looks the way the player is turning, like SMB's skid turn.
 	sprite.flip_h = facing < 0
 	if not is_on_floor():
 		sprite.speed_scale = 1.0
