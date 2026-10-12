@@ -9,15 +9,15 @@ const MAP := [
 	".....................................................................................................................................................#",
 	".....................................................................................................................................................#",
 	".....................................................................................................................................................#",
-	".........................................................................####........................................................................#",
-	".......................................................####.............................#............................................................#",
-	"......................===...........................................................##...............................................................#",
-	"................................................######.........................###.........................................................###########",
-	"................####.....................####...............................####..........................................................############",
-	".........................................................................................................................................#############",
+	"....................................................####.............................................................................................#",
+	"..........................................................................####......................####.............................................#",
+	"......................===......................####..................................................................................................#",
+	".....................................................................####......................####........................................###########",
+	"................####.....................####.............................................................................................############",
+	"................................................................####......................####...........................................#############",
 	".P.............................######...................................................................................................##############",
-	"##########################...###########....##########.....#######################.....###############################################################",
-	"##########################...###########....##########.....#######################.....###############################################################",
+	"##########################...###########....##########....########################....################################################################",
+	"##########################...###########....##########....########################....################################################################",
 ]
 
 const COLORS := {"#": Color8(96, 96, 108), "=": Color8(150, 120, 90)}
@@ -25,7 +25,8 @@ const GRID_COLOR := Color8(70, 70, 82)
 const ONE_WAY_THICKNESS := 6.0          ## visual and collision height of '=' platforms
 const DEFAULT_SPAWN_TILE := Vector2i(2, 10)
 const CAMERA_HEADROOM_TILES := 6        ## camera may scroll this many tiles above row 0
-const FALL_DEATH_MARGIN := 32.0         ## px below the level before the puffin respawns
+const GROUND_ROWS := 2                  ## bottom rows of MAP that form the ground
+const PIT_DEATH_DEPTH := 24.0           ## px the puffin's center must drop below the ground surface to die
 const HUD_TEXT := "M1 move:arrows run:X jump:Z R:reset"
 
 var level_size := Vector2.ZERO
@@ -56,6 +57,12 @@ func _ready() -> void:
 				_add_block(Rect2(start * TILE, y * TILE, (x - start) * TILE, TILE), c)
 				continue
 			x += 1
+	var grid := MapGrid.new()
+	grid.map = MAP
+	grid.tile = TILE
+	grid.color = GRID_COLOR
+	grid.z_index = 1
+	add_child(grid)
 	_player = Puffin.new()
 	_player.name = "Puffin"
 	_player.position = spawn
@@ -68,8 +75,7 @@ func _ready() -> void:
 	cam.limit_bottom = int(level_size.y)
 	add_child(cam)
 	cam.make_current()
-	_player.died.connect(cam.snap_to_target)
-	_player.reset.connect(cam.snap_to_target)
+	_player.respawned.connect(cam.snap_to_target)
 	cam.snap_to_target()
 	_add_hud()
 
@@ -90,29 +96,29 @@ func _add_block(r: Rect2, kind: String) -> void:
 	vis.size = vis_size
 	vis.position = -r.size / 2.0
 	body.add_child(vis)
-	if kind == "#":
-		# Tile grid drawn above the block fill so each tile stays readable.
-		var grid := TileGrid.new()
-		grid.size = r.size
-		grid.position = -r.size / 2.0
-		grid.color = GRID_COLOR
-		grid.tile = TILE
-		body.add_child(grid)
 	add_child(body)
 
-class TileGrid extends Node2D:
-	var size := Vector2.ZERO
-	var color := Color.BLACK
+## Draws the tile grid once for the whole map, above the block fills. Each solid cell draws
+## its top and left edge; right/bottom edges only where they face a non-solid cell, so every
+## line is 1 px wide, including seams between separately built rows.
+class MapGrid extends Node2D:
+	var map: Array
 	var tile := 16
+	var color := Color.BLACK
+	func _solid(x: int, y: int) -> bool:
+		return y >= 0 and y < map.size() and x >= 0 and x < map[y].length() and map[y][x] == "#"
 	func _draw() -> void:
-		for x in int(size.x / tile):
-			for y in int(size.y / tile):
-				# Top and left edge only, so shared borders stay 1 px wide.
+		for y in map.size():
+			for x in map[y].length():
+				if not _solid(x, y):
+					continue
 				var o := Vector2(x * tile, y * tile)
 				draw_line(o + Vector2(0, 0.5), o + Vector2(tile, 0.5), color, 1.0)
 				draw_line(o + Vector2(0.5, 0), o + Vector2(0.5, tile), color, 1.0)
-		# Block outline closes the right and bottom edges.
-		draw_rect(Rect2(Vector2(0.5, 0.5), size - Vector2.ONE), color, false, 1.0)
+				if not _solid(x + 1, y):
+					draw_line(o + Vector2(tile - 0.5, 0), o + Vector2(tile - 0.5, tile), color, 1.0)
+				if not _solid(x, y + 1):
+					draw_line(o + Vector2(0, tile - 0.5), o + Vector2(tile, tile - 0.5), color, 1.0)
 
 func _add_hud() -> void:
 	var layer := CanvasLayer.new()
@@ -127,5 +133,5 @@ func _add_hud() -> void:
 func _physics_process(_delta: float) -> void:
 	if Input.is_action_just_pressed("restart"):
 		_player.respawn(false)
-	elif _player.global_position.y > level_size.y + FALL_DEATH_MARGIN:
-		_player.respawn(true)
+	elif not _player.is_dying() and _player.global_position.y > level_size.y - GROUND_ROWS * TILE + PIT_DEATH_DEPTH:
+		_player.die()
