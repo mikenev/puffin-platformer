@@ -1,0 +1,6 @@
+idle 6 6 1
+run 4 10 1
+skid 2 8 1
+jump 2 8 0
+fall 2 8 1
+death 6 8 0

@@ -58,7 +58,7 @@ func _ready() -> void:
 	shape.shape = rect
 	shape.position = HITBOX_OFFSET
 	add_child(shape)
-	sprite.sprite_frames = PuffinSprite.build()
+	sprite.sprite_frames = load("res://art/puffin/puffin_frames.tres")
 	sprite.position = SPRITE_OFFSET
 	add_child(sprite)
 	sprite.play("idle")
