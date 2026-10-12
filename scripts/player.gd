@@ -93,8 +93,9 @@ func _ready() -> void:
 	_dust.color = Color8(200, 200, 190)
 	add_child(_dust)
 	floor_snap_length = FLOOR_SNAP
-	# Layer 1 too, so #7's fish, checkpoint and goal Areas (default mask 1) still detect the puffin.
-	collision_layer = Enemy.LAYER_WORLD | Enemy.LAYER_PLAYER
+	# Player layer only: enemy bodies and ledge probes (mask = world) never collide with the puffin,
+	# so contact damage comes from _check_enemies(). Pickups/checkpoint/goal mask LAYER_PLAYER.
+	collision_layer = Enemy.LAYER_PLAYER
 	collision_mask = Enemy.LAYER_WORLD
 	spawn_point = global_position
 

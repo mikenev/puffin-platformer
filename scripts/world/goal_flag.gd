@@ -11,6 +11,8 @@ var _done := false
 func _ready() -> void:
 	add_to_group("goal")
 	monitorable = false
+	collision_layer = 0
+	collision_mask = Enemy.LAYER_PLAYER  # the puffin is on the player layer only
 	var cs := CollisionShape2D.new()
 	var shape := RectangleShape2D.new()
 	shape.size = Vector2(12, HEIGHT)
