@@ -1,0 +1,10 @@
+# Godot 4
+.godot/
+/android/
+*.translation
+export_credentials.cfg
+*.tmp
+# Build output
+build/*
+!build/.gdignore
+.DS_Store
