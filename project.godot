@@ -3,12 +3,13 @@ config_version=5
 
 [application]
 config/name="Puffin Platformer"
-run/main_scene="res://scenes/main.tscn"
+run/main_scene="res://scenes/ui/title.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 
 [autoload]
 InputSetup="*res://scripts/input_setup.gd"
 AudioManager="*res://scripts/audio_manager.gd"
+GameState="*res://scripts/game_state.gd"
 
 [display]
 window/size/viewport_width=256

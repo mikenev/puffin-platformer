@@ -76,6 +76,8 @@ func _ready() -> void:
 	add_child(cam)
 	cam.make_current()
 	_player.respawned.connect(cam.snap_to_target)
+	_player.died.connect(_on_player_died)
+	_player.respawned.connect(_on_player_respawned)
 	cam.snap_to_target()
 	_add_hud()
 
@@ -124,7 +126,7 @@ func _add_hud() -> void:
 	var layer := CanvasLayer.new()
 	var label := Label.new()
 	label.name = "Hud"
-	label.position = Vector2(4, 2)
+	label.position = Vector2(4, 212)  # bottom: top row is the GameHud
 	label.add_theme_font_size_override("font_size", 8)
 	label.text = HUD_TEXT
 	layer.add_child(label)
@@ -135,3 +137,14 @@ func _physics_process(_delta: float) -> void:
 		_player.respawn(false)
 	elif not _player.is_dying() and _player.global_position.y > level_size.y - GROUND_ROWS * TILE + PIT_DEATH_DEPTH:
 		_player.die()
+
+var _game_over := false
+
+## Pit death costs a life (GameState drives the HUD). Out of lives -> back to title once the death anim ends.
+func _on_player_died() -> void:
+	if has_node("/root/GameState") and not GameState.lose_life():
+		_game_over = true
+
+func _on_player_respawned() -> void:
+	if _game_over:
+		get_tree().change_scene_to_file.call_deferred("res://scenes/ui/title.tscn")
