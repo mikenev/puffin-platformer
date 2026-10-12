@@ -176,7 +176,7 @@ def level_1_3():
     m.water(63, 80)
     m.ground(81, 105, 12, "S")
     m.put(84, 11, "C")
-    m.put(92, 7, "w")
+    m.put(92, 5, "w")
     m.plat(90, 94, 8)
     m.fish_line(90, 94, 7)
     m.put(100, 11, "k")
