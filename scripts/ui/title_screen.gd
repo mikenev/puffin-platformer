@@ -2,7 +2,7 @@ extends Control
 ## Title screen + main menu. Plays title_theme through AudioManager.
 ## States: TITLE ("PRESS START") -> MENU (Start/Options/Quit) <-> OPTIONS.
 
-const LEVEL_SCENE := "res://scenes/main.tscn"
+const LEVEL_SCENE := "res://scenes/world/world_level.tscn"
 const SKY_TOP := Color8(40, 56, 128)
 const SKY_BOTTOM := Color8(112, 168, 232)
 const SEA := Color8(32, 80, 152)
