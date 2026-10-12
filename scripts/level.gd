@@ -118,7 +118,7 @@ func _add_hud() -> void:
 	var layer := CanvasLayer.new()
 	var label := Label.new()
 	label.name = "Hud"
-	label.position = Vector2(4, 2)
+	label.position = Vector2(4, 212)  # bottom: top row is the GameHud
 	label.add_theme_font_size_override("font_size", 8)
 	label.text = HUD_TEXT
 	layer.add_child(label)
@@ -128,4 +128,7 @@ func _physics_process(_delta: float) -> void:
 	if Input.is_action_just_pressed("restart"):
 		_player.respawn(false)
 	elif _player.global_position.y > level_size.y + FALL_DEATH_MARGIN:
+		if has_node("/root/GameState") and not GameState.lose_life():
+			get_tree().change_scene_to_file("res://scenes/ui/title.tscn")
+			return
 		_player.respawn(true)
