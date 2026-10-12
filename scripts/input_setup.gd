@@ -6,6 +6,7 @@ const KEYS := {
 	"move_right": [KEY_RIGHT, KEY_D],
 	"jump": [KEY_SPACE, KEY_Z, KEY_UP, KEY_W],
 	"run": [KEY_SHIFT, KEY_X],
+	"move_down": [KEY_DOWN, KEY_S],
 	"restart": [KEY_R],
 }
 const DEADZONE := 0.25
@@ -14,6 +15,7 @@ const PAD := {
 	"move_right": [JOY_BUTTON_DPAD_RIGHT],
 	"jump": [JOY_BUTTON_A],
 	"run": [JOY_BUTTON_X, JOY_BUTTON_B],
+	"move_down": [JOY_BUTTON_DPAD_DOWN],
 	"restart": [JOY_BUTTON_START],
 }
 

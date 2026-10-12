@@ -25,8 +25,8 @@ signal respawned  ## puffin is back at spawn (after death or reset)
 @export var coyote_time := 0.09
 @export var jump_buffer_time := 0.11
 
-## Hook for the colored-fish power-ups (later milestones): each fish sets `power`,
-## and movement code will branch on it (e.g. DIVE underwater, GLIDE slow fall). Unused in M1.
+## Colored-fish power-ups: FishPickup calls collect_power(). DIVE = blue fish (down in the air
+## dives straight down and stomps), GLIDE = green fish (hold jump while falling to glide).
 enum Power { NONE, DIVE, GLIDE }
 var power: Power = Power.NONE
 
@@ -49,6 +49,21 @@ const RUN_ANIM_SCALE := Vector2(0.75, 2.0)  ## min keeps the run cycle moving at
 const DEATH_TIME := 0.9
 const DEATH_HOP := -260.0
 var _death_t := 0.0
+
+@export_group("Power-ups")
+@export var dive_speed := 360.0          ## DIVE: fall speed while diving (down in the air)
+@export var glide_fall_speed := 45.0     ## GLIDE: max fall speed while holding jump
+@export var glide_gravity := 500.0
+@export var stomp_bounce_velocity := -200.0
+@export var stomp_bounce_held := -320.0  ## bounce when jump is held on stomp
+@export var hurt_invuln_time := 1.5
+const POWER_TINT := {0: Color.WHITE, 1: Color8(150, 190, 255), 2: Color8(160, 255, 170)}
+const FLICKER_HZ := 15.0
+var diving := false
+var gliding := false
+var _invuln := 0.0
+var _was_on_floor := true
+var _was_skidding := false
 const SKID_MIN_SPEED := 40.0
 
 func _ready() -> void:
@@ -77,6 +92,8 @@ func _ready() -> void:
 	_dust.color = Color8(200, 200, 190)
 	add_child(_dust)
 	floor_snap_length = FLOOR_SNAP
+	collision_layer = Enemy.LAYER_PLAYER
+	collision_mask = Enemy.LAYER_WORLD
 	spawn_point = global_position
 
 func _physics_process(delta: float) -> void:
@@ -90,13 +107,24 @@ func _physics_process(delta: float) -> void:
 		return
 	var dir := Input.get_axis("move_left", "move_right")
 	var running := Input.is_action_pressed("run")
-	_update_horizontal(dir, running, delta)
+	if not diving:
+		_update_horizontal(dir, running, delta)
 	_update_timers(delta)
 	_update_jump()
-	_apply_gravity(delta)
+	_update_power(delta)
+	if not diving:
+		_apply_gravity(delta)
+	var prev_feet := feet_y()
+	var prev_vy := velocity.y
 	move_and_slide()
 	if is_on_ceiling() and velocity.y < 0:
 		velocity.y = 0
+	_check_enemies(prev_feet, prev_vy)
+	var on_floor := is_on_floor()
+	if on_floor and not _was_on_floor:
+		diving = false
+		Sfx.play("land")
+	_was_on_floor = on_floor
 	_update_animation(dir)
 
 func _update_horizontal(dir: float, running: bool, delta: float) -> void:
@@ -131,6 +159,7 @@ func _update_jump() -> void:
 		var speed_ratio := clampf(absf(velocity.x) / run_speed, 0.0, 1.0)
 		velocity.y = jump_velocity + run_jump_bonus * speed_ratio
 		_jumping = true
+		Sfx.play("jump")
 		_buffer = 0.0
 		_coyote = 0.0
 		# Buffered jump whose button was already released: cut it right away (short hop).
@@ -148,7 +177,66 @@ func _apply_gravity(delta: float) -> void:
 	var g := gravity_fall
 	if velocity.y < 0.0 and Input.is_action_pressed("jump"):
 		g = gravity_rise
-	velocity.y = minf(velocity.y + g * delta, max_fall_speed)
+	var cap := max_fall_speed
+	if gliding:
+		g = glide_gravity
+		cap = glide_fall_speed
+	velocity.y = minf(velocity.y + g * delta, cap)
+
+## Power-up movement. `power` is set by FishPickup via collect_power().
+func _update_power(delta: float) -> void:
+	gliding = power == Power.GLIDE and not is_on_floor() and velocity.y > 0.0 \
+		and Input.is_action_pressed("jump")
+	if power == Power.DIVE and not is_on_floor() and not diving \
+			and Input.is_action_just_pressed("move_down"):
+		diving = true
+	if diving:
+		velocity = Vector2(0.0, dive_speed)
+	if _invuln > 0.0:
+		_invuln -= delta
+		sprite.visible = _invuln <= 0.0 or int(_invuln * FLICKER_HZ) % 2 == 0
+	else:
+		sprite.visible = true
+
+func _check_enemies(prev_feet: float, prev_vy: float) -> void:
+	var me := Rect2(global_position + HITBOX_OFFSET - HITBOX_SIZE / 2.0, HITBOX_SIZE)
+	for e in get_tree().get_nodes_in_group("enemies"):
+		if e is Enemy and not e.squashed and me.intersects(e.rect()):
+			e.touch(self, prev_feet, prev_vy)
+			if is_dying():
+				return
+
+func feet_y() -> float:
+	return global_position.y + HITBOX_OFFSET.y + HITBOX_SIZE.y / 2.0
+
+func is_invulnerable() -> bool:
+	return _invuln > 0.0
+
+func collect_power(p: Power) -> void:
+	Sfx.play("collect_fish")
+	set_power(p)
+	Sfx.play("powerup")
+
+func set_power(p: Power) -> void:
+	power = p
+	diving = false
+	sprite.modulate = POWER_TINT[int(p)]
+
+## Called by enemies on a side/below hit: lose the power-up, or die if already normal.
+func hurt() -> void:
+	if is_dying() or is_invulnerable():
+		return
+	if power != Power.NONE:
+		set_power(Power.NONE)
+		_invuln = hurt_invuln_time
+	else:
+		die()
+
+## Called by an enemy we landed on. Holding jump gives the higher bounce.
+func stomp_bounce() -> void:
+	diving = false
+	velocity.y = stomp_bounce_held if Input.is_action_pressed("jump") else stomp_bounce_velocity
+	_jumping = Input.is_action_pressed("jump")
 
 func is_skidding(dir: float) -> bool:
 	return is_on_floor() and absf(velocity.x) > SKID_MIN_SPEED and dir != 0.0 \
@@ -156,6 +244,9 @@ func is_skidding(dir: float) -> bool:
 
 func _update_animation(dir: float) -> void:
 	var skid := is_skidding(dir)
+	if skid and not _was_skidding:
+		Sfx.play("skid")
+	_was_skidding = skid
 	_dust.emitting = skid
 	# While skidding, `facing` already points toward the pressed direction (opposite the
 	# slide), so the skid sprite looks the way the player is turning, like SMB's skid turn.
@@ -186,6 +277,7 @@ func die() -> void:
 	_dust.emitting = false
 	sprite.speed_scale = 1.0
 	sprite.play("death")
+	Sfx.play("death")
 	died.emit()
 
 ## Puts the puffin back at spawn. `fell` = true after the death animation, false for an
@@ -194,6 +286,9 @@ func respawn(fell: bool = true) -> void:
 	global_position = spawn_point
 	velocity = Vector2.ZERO
 	_death_t = 0.0
+	_invuln = 0.0
+	if fell:
+		set_power(Power.NONE)
 	_jumping = false
 	_jump_cut_pending = false
 	_buffer = 0.0

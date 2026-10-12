@@ -29,6 +29,10 @@ const GROUND_ROWS := 2                  ## bottom rows of MAP that form the grou
 const PIT_DEATH_DEPTH := 24.0           ## px the puffin's center must drop below the ground surface to die
 const HUD_TEXT := "M1 move:arrows run:X jump:Z R:reset"
 
+## Gameplay spawns (tile coords). Enemies stand on the ground row; fish float 1 tile above a surface.
+const ENEMY_SPAWNS := [Vector2i(14, 11), Vector2i(50, 11), Vector2i(62, 11), Vector2i(78, 11), Vector2i(100, 11), Vector2i(118, 11)]
+const FISH_SPAWNS := [[Vector2i(18, 8), 1], [Vector2i(70, 7), 2], [Vector2i(96, 7), 1], [Vector2i(124, 11), 2]]
+
 var level_size := Vector2.ZERO
 var _player: Puffin
 
@@ -78,6 +82,19 @@ func _ready() -> void:
 	_player.respawned.connect(cam.snap_to_target)
 	cam.snap_to_target()
 	_add_hud()
+	_spawn_gameplay()
+	Sfx.music("world1_theme")
+
+func _spawn_gameplay() -> void:
+	for t: Vector2i in ENEMY_SPAWNS:
+		var e := Enemy.new()
+		e.position = Vector2(t.x * TILE + TILE / 2.0, (t.y + 1) * TILE - Enemy.SIZE.y / 2.0)
+		add_child(e)
+	for f in FISH_SPAWNS:
+		var fish := FishPickup.new()
+		fish.power = f[1]
+		fish.position = Vector2(f[0].x * TILE + TILE / 2.0, f[0].y * TILE + TILE / 2.0)
+		add_child(fish)
 
 func _add_block(r: Rect2, kind: String) -> void:
 	var body := StaticBody2D.new()
