@@ -29,13 +29,6 @@ const GROUND_ROWS := 2                  ## bottom rows of MAP that form the grou
 const PIT_DEATH_DEPTH := 24.0           ## px the puffin's center must drop below the ground surface to die
 const HUD_TEXT := "M1 move:arrows run:X jump:Z R:reset"
 
-## Gameplay spawns (tile coords). Enemies stand on the ground row; fish float 1 tile above a surface.
-## Each crab: [spawn tile, patrol min column, patrol max column]. Patrols stay 6+ tiles from
-## spawn and off the gap landing zones (c29-30, c44-46, c58-63, c86-91).
-const ENEMY_SPAWNS := [[Vector2i(18, 11), 12, 25], [Vector2i(50, 11), 48, 53], [Vector2i(70, 11), 64, 81],
-	[Vector2i(100, 11), 92, 115], [Vector2i(124, 11), 116, 134]]
-const FISH_SPAWNS := [[Vector2i(18, 8), 1], [Vector2i(70, 7), 2], [Vector2i(96, 7), 1], [Vector2i(124, 11), 2]]
-
 var level_size := Vector2.ZERO
 var _player: Puffin
 
@@ -83,35 +76,10 @@ func _ready() -> void:
 	add_child(cam)
 	cam.make_current()
 	_player.respawned.connect(cam.snap_to_target)
-	_player.respawned.connect(_reset_enemies)
+	_player.died.connect(_on_player_died)
+	_player.respawned.connect(_on_player_respawned)
 	cam.snap_to_target()
 	_add_hud()
-	_spawn_gameplay()
-	Sfx.music("world1_theme")
-
-func _spawn_gameplay() -> void:
-	_spawn_enemies()
-	for f in FISH_SPAWNS:
-		var fish := FishPickup.new()
-		fish.power = f[1]
-		fish.position = Vector2(f[0].x * TILE + TILE / 2.0, f[0].y * TILE + TILE / 2.0)
-		add_child(fish)
-
-func _spawn_enemies() -> void:
-	for s in ENEMY_SPAWNS:
-		var t: Vector2i = s[0]
-		var e := Enemy.new()
-		e.position = Vector2(t.x * TILE + TILE / 2.0, (t.y + 1) * TILE - Enemy.SIZE.y / 2.0)
-		e.patrol_min_x = s[1] * TILE
-		e.patrol_max_x = (s[2] + 1) * TILE
-		add_child(e)
-
-## On death or R: every crab (stomped ones too) goes back to its spawn.
-func _reset_enemies() -> void:
-	for e in get_tree().get_nodes_in_group("enemies"):
-		e.remove_from_group("enemies")
-		e.queue_free()
-	_spawn_enemies()
 
 func _add_block(r: Rect2, kind: String) -> void:
 	var body := StaticBody2D.new()
@@ -158,7 +126,7 @@ func _add_hud() -> void:
 	var layer := CanvasLayer.new()
 	var label := Label.new()
 	label.name = "Hud"
-	label.position = Vector2(4, 2)
+	label.position = Vector2(4, 212)  # bottom: top row is the GameHud
 	label.add_theme_font_size_override("font_size", 8)
 	label.text = HUD_TEXT
 	layer.add_child(label)
@@ -169,3 +137,14 @@ func _physics_process(_delta: float) -> void:
 		_player.respawn(false)
 	elif not _player.is_dying() and _player.global_position.y > level_size.y - GROUND_ROWS * TILE + PIT_DEATH_DEPTH:
 		_player.die()
+
+var _game_over := false
+
+## Pit death costs a life (GameState drives the HUD). Out of lives -> back to title once the death anim ends.
+func _on_player_died() -> void:
+	if has_node("/root/GameState") and not GameState.lose_life():
+		_game_over = true
+
+func _on_player_respawned() -> void:
+	if _game_over:
+		get_tree().change_scene_to_file.call_deferred("res://scenes/ui/title.tscn")

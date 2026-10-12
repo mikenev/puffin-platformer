@@ -25,7 +25,7 @@ signal respawned  ## puffin is back at spawn (after death or reset)
 @export var coyote_time := 0.09
 @export var jump_buffer_time := 0.11
 
-## Colored-fish power-ups: FishPickup calls collect_power(). DIVE = blue fish (down in the air
+## Colored-fish power-ups: PowerFish calls collect_power(). DIVE = blue fish (down in the air
 ## dives straight down and stomps), GLIDE = green fish (hold jump while falling to glide).
 enum Power { NONE, DIVE, GLIDE }
 var power: Power = Power.NONE
@@ -74,7 +74,7 @@ func _ready() -> void:
 	shape.shape = rect
 	shape.position = HITBOX_OFFSET
 	add_child(shape)
-	sprite.sprite_frames = PuffinSprite.build()
+	sprite.sprite_frames = load("res://art/puffin/puffin_frames.tres")
 	sprite.position = SPRITE_OFFSET
 	add_child(sprite)
 	sprite.play("idle")
@@ -93,7 +93,8 @@ func _ready() -> void:
 	_dust.color = Color8(200, 200, 190)
 	add_child(_dust)
 	floor_snap_length = FLOOR_SNAP
-	collision_layer = Enemy.LAYER_PLAYER
+	# Layer 1 too, so #7's fish, checkpoint and goal Areas (default mask 1) still detect the puffin.
+	collision_layer = Enemy.LAYER_WORLD | Enemy.LAYER_PLAYER
 	collision_mask = Enemy.LAYER_WORLD
 	spawn_point = global_position
 
@@ -184,7 +185,7 @@ func _apply_gravity(delta: float) -> void:
 		cap = glide_fall_speed
 	velocity.y = minf(velocity.y + g * delta, cap)
 
-## Power-up movement. `power` is set by FishPickup via collect_power().
+## Power-up movement. `power` is set by PowerFish via collect_power().
 func _update_power(delta: float) -> void:
 	gliding = power == Power.GLIDE and not is_on_floor() and velocity.y > 0.0 \
 		and Input.is_action_pressed("jump")

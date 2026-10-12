@@ -1,5 +1,5 @@
 extends SceneTree
-## Scripted gameplay checks for enemies, stomp, fish power-ups, dive, glide and audio calls.
+## Scripted gameplay mechanics checks on the gray-box level (per-course checks: test_world_gameplay.gd) for enemies, stomp, fish power-ups, dive, glide and audio calls.
 ## Run: godot --headless --fixed-fps 60 -s res://tests/test_gameplay.gd
 var L: Node
 var P: Puffin
@@ -45,17 +45,8 @@ func _run() -> void:
 	root.add_child(L)
 	await frames(3)
 	P = L.get_node("Puffin")
-	ok(Sfx.history.has("music:world1_theme"), "level start plays music world1_theme")
 	for n in ["jump", "land", "skid", "death", "collect_fish", "powerup", "stomp"]:
 		ok(ResourceLoader.exists("res://audio/sfx/%s.ogg" % n), "sfx asset exists: " + n)
-	var enemies := L.get_children().filter(func(c): return c is Enemy)
-	var fish := L.get_children().filter(func(c): return c is FishPickup)
-	ok(enemies.size() >= 3, "level has %d enemies" % enemies.size())
-	ok(enemies.all(func(e): return absf(e.position.x - P.spawn_point.x) > 128), "no enemy within 8 tiles of spawn")
-	ok(fish.size() >= 4, "level has %d fish" % fish.size())
-	# keep level enemies away from test area (x 300-400 on ground c0-25)
-	for e in enemies: if e.position.x < 450: e.queue_free()
-	for f in fish: if f.position.x < 450: f.queue_free()
 	await frames(2)
 
 	# Patrol turns at a wall: start one walking toward the r11 step side? use ledge at gap1 (x 416)
@@ -110,7 +101,7 @@ func _run() -> void:
 	for pw in [Puffin.Power.DIVE, Puffin.Power.GLIDE]:
 		Sfx.history.clear()
 		await reset_at(Vector2(200, 183))
-		var f := FishPickup.new(); f.power = pw; f.position = Vector2(230, 180); L.add_child(f)
+		var f := PowerFish.new(); f.power = pw; f.position = Vector2(230, 180); L.add_child(f)
 		press("move_right")
 		await frames(40)
 		press("move_right", false)
@@ -151,25 +142,6 @@ func _run() -> void:
 	ok(Sfx.history.has("skid"), "skid sfx fired")
 	press("move_left", false); press("run", false)
 
-	# Spawn safety: no crab patrol range within 6 tiles of spawn
-	var lv := L as Node
-	var spawn_x: float = P.spawn_point.x
-	var near := 999.0
-	for sp in lv.ENEMY_SPAWNS:
-		near = minf(near, sp[1] * lv.TILE - spawn_x)
-	ok(near >= 6 * lv.TILE, "closest crab patrol edge is %.0f px (%.1f tiles) from spawn" % [near, near / lv.TILE])
-	# ...and in practice: let the real crabs patrol for 20 s and track the closest approach
-	P.respawn(false)
-	await frames(2)
-	var crabs := L.get_children().filter(func(c): return c is Enemy)
-	var closest := 9999.0
-	for i in 1200:
-		await physics_frame
-		P.global_position = P.spawn_point
-		P._invuln = 1.0  # keep the puffin parked at spawn without dying
-		for c in crabs:
-			if is_instance_valid(c): closest = minf(closest, c.global_position.x - Enemy.SIZE.x / 2.0 - spawn_x)
-	ok(closest >= 6 * 16, "crabs over 20 s stayed %.0f px from spawn" % closest)
 	# Respawn invulnerability
 	await reset_at(Vector2(300, 183))
 	P.respawn(false)
@@ -181,25 +153,5 @@ func _run() -> void:
 	await frames(70)
 	ok(not P.is_invulnerable(), "respawn invulnerability ends after ~1.5 s")
 	e5.queue_free()
-	# Crabs reset on R and on death (stomped ones come back)
-	P.respawn(false)
-	await frames(2)
-	var first := L.get_children().filter(func(c): return c is Enemy and not c.is_queued_for_deletion())
-	var n0 := first.size()
-	first[0].stomp(P)
-	first[1].global_position.x += 40
-	P.respawn(false)
-	await frames(2)
-	var after := L.get_children().filter(func(c): return c is Enemy and not c.is_queued_for_deletion())
-	var at_spawn := true
-	for i in after.size():
-		var sp: Vector2i = lv.ENEMY_SPAWNS[i][0]
-		if absf(after[i].global_position.x - (sp.x * 16 + 8)) > 2: at_spawn = false
-	ok(after.size() == n0 and at_spawn and after.all(func(c): return not c.squashed), "R reset: all %d crabs back at spawn, stomped ones restored" % n0)
-	after[0].stomp(P)
-	P.die()
-	await frames(70)
-	var after2 := L.get_children().filter(func(c): return c is Enemy and not c.is_queued_for_deletion())
-	ok(after2.size() == n0 and after2.all(func(c): return not c.squashed), "death respawn: all crabs restored")
 	print("RESULT: %d failures" % fails)
 	quit(1 if fails else 0)

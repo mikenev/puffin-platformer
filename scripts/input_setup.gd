@@ -8,6 +8,7 @@ const KEYS := {
 	"run": [KEY_SHIFT, KEY_X],
 	"move_down": [KEY_DOWN, KEY_S],
 	"restart": [KEY_R],
+	"pause": [KEY_ESCAPE, KEY_P],
 }
 const DEADZONE := 0.25
 const PAD := {
@@ -16,7 +17,8 @@ const PAD := {
 	"jump": [JOY_BUTTON_A],
 	"run": [JOY_BUTTON_X, JOY_BUTTON_B],
 	"move_down": [JOY_BUTTON_DPAD_DOWN],
-	"restart": [JOY_BUTTON_START],
+	"restart": [JOY_BUTTON_BACK],
+	"pause": [JOY_BUTTON_START],
 }
 
 func _ready() -> void:

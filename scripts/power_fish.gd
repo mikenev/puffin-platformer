@@ -1,4 +1,4 @@
-class_name FishPickup
+class_name PowerFish
 extends Area2D
 ## Bobbing colored-fish power-up. Blue = DIVE, green = GLIDE (see Puffin.Power).
 

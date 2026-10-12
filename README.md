@@ -20,7 +20,7 @@ Godot **4.7.2-stable** (GDScript, GL Compatibility renderer). Base resolution 25
 | Respawn | R | Start |
 
 ### Layout
-`scenes/main.tscn` (entry), `scripts/level.gd` (ASCII gray-box level, falling out respawns you), `scripts/player.gd` (puffin controller, `Power` enum is the hook for the fish power-ups), `scripts/follow_camera.gd`, `scripts/puffin_sprite.gd` (original 16x16 placeholder art made in code), `scripts/input_setup.gd` (input map). `art/`, `audio/` are reserved.
+`scenes/main.tscn` (entry), `scripts/level.gd` (ASCII gray-box level, falling out respawns you), `scripts/player.gd` (puffin controller, `Power` enum is the hook for the fish power-ups), `scripts/follow_camera.gd`, `scripts/input_setup.gd` (input map). `art/` holds the original M2 puffin SpriteFrames and coastal TileSet (regenerate with `tools/gen_art.py` + `tools/build_resources.gd`); `audio/` is reserved.
 
 ### Tuning (exported on `Puffin`, px and seconds)
 walk_speed 90, run_speed 150, ground_accel 420, ground_decel 520, skid_decel 900, air_accel 300, air_decel 120, jump_velocity -330, run_jump_bonus -25, gravity_rise 820, gravity_fall 1300, jump_cut_multiplier 0.45, max_fall_speed 300, coyote_time 0.09, jump_buffer_time 0.11. Camera: look_ahead 40, smoothing 7.

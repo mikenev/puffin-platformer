@@ -19,6 +19,7 @@ var dir := -1
 var patrol_min_x := -INF
 var patrol_max_x := INF
 var squashed := false
+var look := "crab"   ## "crab" or "walker" (palette swap)
 var _sprite := AnimatedSprite2D.new()
 
 func _ready() -> void:
@@ -30,10 +31,13 @@ func _ready() -> void:
 	cs.shape = r
 	add_child(cs)
 	add_to_group("enemies")
-	_sprite.sprite_frames = EnemySprite.build()
+	_sprite.sprite_frames = _frames()
 	_sprite.position.y = SPRITE_Y
 	add_child(_sprite)
 	_sprite.play("walk")
+
+func _frames() -> SpriteFrames:
+	return EnemySprite.build(look)
 
 func _physics_process(delta: float) -> void:
 	if squashed:
