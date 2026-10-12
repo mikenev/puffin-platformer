@@ -3,8 +3,9 @@ extends CharacterBody2D
 ## Puffin player controller: SMB-style momentum, variable jump, coyote time, jump buffer.
 ## Units: pixels and seconds. All tuning values are exported.
 
-signal died   ## fell out of the level
-signal reset  ## player pressed restart
+signal died       ## fell in a pit (death animation starts)
+signal reset      ## player pressed restart (instant)
+signal respawned  ## puffin is back at spawn (after death or reset)
 
 @export_group("Run")
 @export var walk_speed := 90.0
@@ -44,7 +45,10 @@ const SPRITE_OFFSET := Vector2(1, 0)
 const FLOOR_SNAP := 4.0
 const OVERSPEED_DECEL_FACTOR := 0.5   ## fraction of ground_decel used when above top speed
 const RUN_ANIM_MIN_SPEED := 5.0
-const RUN_ANIM_SCALE := Vector2(0.6, 2.0)
+const RUN_ANIM_SCALE := Vector2(0.75, 2.0)  ## min keeps the run cycle moving at low speed
+const DEATH_TIME := 0.9
+const DEATH_HOP := -260.0
+var _death_t := 0.0
 const SKID_MIN_SPEED := 40.0
 
 func _ready() -> void:
@@ -76,6 +80,14 @@ func _ready() -> void:
 	spawn_point = global_position
 
 func _physics_process(delta: float) -> void:
+	if _death_t > 0.0:
+		# SMB-style death: pop up, then fall through everything, then respawn.
+		_death_t -= delta
+		velocity.y = minf(velocity.y + gravity_fall * delta, max_fall_speed)
+		position += velocity * delta
+		if _death_t <= 0.0:
+			respawn(true)
+		return
 	var dir := Input.get_axis("move_left", "move_right")
 	var running := Input.is_action_pressed("run")
 	_update_horizontal(dir, running, delta)
@@ -148,6 +160,7 @@ func _update_animation(dir: float) -> void:
 	# While skidding, `facing` already points toward the pressed direction (opposite the
 	# slide), so the skid sprite looks the way the player is turning, like SMB's skid turn.
 	sprite.flip_h = facing < 0
+	sprite.position.x = SPRITE_OFFSET.x * facing
 	if not is_on_floor():
 		sprite.speed_scale = 1.0
 		sprite.play("jump" if velocity.y < 0 else "fall")
@@ -155,21 +168,37 @@ func _update_animation(dir: float) -> void:
 		sprite.speed_scale = 1.0
 		sprite.play("skid")
 	elif absf(velocity.x) > RUN_ANIM_MIN_SPEED:
-		sprite.play("run")
 		sprite.speed_scale = clampf(absf(velocity.x) / walk_speed, RUN_ANIM_SCALE.x, RUN_ANIM_SCALE.y)
+		sprite.play("run")
 	else:
 		sprite.speed_scale = 1.0
 		sprite.play("idle")
 
-## Returns the puffin to spawn. `fell` = true for a pit death (emits `died`), false for an R reset.
+func is_dying() -> bool:
+	return _death_t > 0.0
+
+## Pit death: emits `died`, plays the death animation, then respawns.
+func die() -> void:
+	if is_dying():
+		return
+	_death_t = DEATH_TIME
+	velocity = Vector2(0.0, DEATH_HOP)
+	_dust.emitting = false
+	sprite.speed_scale = 1.0
+	sprite.play("death")
+	died.emit()
+
+## Puts the puffin back at spawn. `fell` = true after the death animation, false for an
+## instant R reset (emits `reset`). Always emits `respawned`.
 func respawn(fell: bool = true) -> void:
 	global_position = spawn_point
 	velocity = Vector2.ZERO
+	_death_t = 0.0
 	_jumping = false
 	_jump_cut_pending = false
 	_buffer = 0.0
 	_coyote = 0.0
-	if fell:
-		died.emit()
-	else:
+	sprite.play("idle")
+	if not fell:
 		reset.emit()
+	respawned.emit()
