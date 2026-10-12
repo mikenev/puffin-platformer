@@ -8,6 +8,7 @@ const KEYS := {
 	"run": [KEY_SHIFT, KEY_X],
 	"restart": [KEY_R],
 }
+const DEADZONE := 0.25
 const PAD := {
 	"move_left": [JOY_BUTTON_DPAD_LEFT],
 	"move_right": [JOY_BUTTON_DPAD_RIGHT],
@@ -19,7 +20,7 @@ const PAD := {
 func _ready() -> void:
 	for action in KEYS:
 		if not InputMap.has_action(action):
-			InputMap.add_action(action, 0.25)
+			InputMap.add_action(action, DEADZONE)
 		for k in KEYS[action]:
 			var ev := InputEventKey.new()
 			ev.physical_keycode = k

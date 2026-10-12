@@ -3,7 +3,8 @@ extends CharacterBody2D
 ## Puffin player controller: SMB-style momentum, variable jump, coyote time, jump buffer.
 ## Units: pixels and seconds. All tuning values are exported.
 
-signal died
+signal died   ## fell out of the level
+signal reset  ## player pressed restart
 
 @export_group("Run")
 @export var walk_speed := 90.0
@@ -23,7 +24,8 @@ signal died
 @export var coyote_time := 0.09
 @export var jump_buffer_time := 0.11
 
-## Future power-ups (colored fish) hook in here. Abilities may override movement per state.
+## Hook for the colored-fish power-ups (later milestones): each fish sets `power`,
+## and movement code will branch on it (e.g. DIVE underwater, GLIDE slow fall). Unused in M1.
 enum Power { NONE, DIVE, GLIDE }
 var power: Power = Power.NONE
 
@@ -32,20 +34,45 @@ var _coyote := 0.0
 var _buffer := 0.0
 var _jumping := false
 var spawn_point := Vector2.ZERO
-@onready var sprite: AnimatedSprite2D = AnimatedSprite2D.new()
+var _jump_cut_pending := false
+var sprite := AnimatedSprite2D.new()
+var _dust: CPUParticles2D
+
+const HITBOX_SIZE := Vector2(10, 13)
+const HITBOX_OFFSET := Vector2(0, 1.5)
+const SPRITE_OFFSET := Vector2(1, 0)
+const FLOOR_SNAP := 4.0
+const OVERSPEED_DECEL_FACTOR := 0.5   ## fraction of ground_decel used when above top speed
+const RUN_ANIM_MIN_SPEED := 5.0
+const RUN_ANIM_SCALE := Vector2(0.6, 2.0)
+const SKID_MIN_SPEED := 40.0
 
 func _ready() -> void:
 	var shape := CollisionShape2D.new()
 	var rect := RectangleShape2D.new()
-	rect.size = Vector2(10, 13)
+	rect.size = HITBOX_SIZE
 	shape.shape = rect
-	shape.position = Vector2(0, 1.5)
+	shape.position = HITBOX_OFFSET
 	add_child(shape)
 	sprite.sprite_frames = PuffinSprite.build()
-	sprite.position = Vector2(1, 0)
+	sprite.position = SPRITE_OFFSET
 	add_child(sprite)
 	sprite.play("idle")
-	floor_snap_length = 4.0
+	_dust = CPUParticles2D.new()
+	_dust.position = Vector2(0, HITBOX_OFFSET.y + HITBOX_SIZE.y / 2.0)
+	_dust.emitting = false
+	_dust.amount = 6
+	_dust.lifetime = 0.3
+	_dust.direction = Vector2(0, -1)
+	_dust.spread = 60.0
+	_dust.gravity = Vector2.ZERO
+	_dust.initial_velocity_min = 10.0
+	_dust.initial_velocity_max = 25.0
+	_dust.scale_amount_min = 1.0
+	_dust.scale_amount_max = 2.0
+	_dust.color = Color8(200, 200, 190)
+	add_child(_dust)
+	floor_snap_length = FLOOR_SNAP
 	spawn_point = global_position
 
 func _physics_process(delta: float) -> void:
@@ -58,20 +85,20 @@ func _physics_process(delta: float) -> void:
 	move_and_slide()
 	if is_on_ceiling() and velocity.y < 0:
 		velocity.y = 0
-	_update_animation(dir)
+	_update_animation()
 
 func _update_horizontal(dir: float, running: bool, delta: float) -> void:
 	var top := run_speed if running else walk_speed
 	var on_floor := is_on_floor()
 	if dir != 0.0:
-		facing = signi(int(sign(dir)))
+		facing = 1 if dir > 0.0 else -1
 		var target := dir * top
 		var accel := ground_accel if on_floor else air_accel
-		if on_floor and sign(velocity.x) != 0 and sign(velocity.x) != sign(dir):
+		if on_floor and signf(velocity.x) != 0.0 and signf(velocity.x) != signf(dir):
 			accel = skid_decel
 		# Above top speed (released run): bleed off gently instead of snapping.
-		if absf(velocity.x) > top and sign(velocity.x) == sign(dir):
-			accel = ground_decel * 0.5 if on_floor else 0.0
+		if absf(velocity.x) > top and signf(velocity.x) == signf(dir):
+			accel = ground_decel * OVERSPEED_DECEL_FACTOR if on_floor else 0.0
 		velocity.x = move_toward(velocity.x, target, accel * delta)
 	else:
 		velocity.x = move_toward(velocity.x, 0.0, (ground_decel if on_floor else air_decel) * delta)
@@ -94,8 +121,12 @@ func _update_jump() -> void:
 		_jumping = true
 		_buffer = 0.0
 		_coyote = 0.0
+		# Buffered jump whose button was already released: cut it right away (short hop).
+		_jump_cut_pending = not Input.is_action_pressed("jump")
 	# Variable height: releasing jump while rising cuts upward velocity.
-	if _jumping and Input.is_action_just_released("jump") and velocity.y < 0.0:
+	var cut := _jump_cut_pending or Input.is_action_just_released("jump")
+	_jump_cut_pending = false
+	if _jumping and cut and velocity.y < 0.0:
 		velocity.y *= jump_cut_multiplier
 		_jumping = false
 
@@ -107,17 +138,38 @@ func _apply_gravity(delta: float) -> void:
 		g = gravity_rise
 	velocity.y = minf(velocity.y + g * delta, max_fall_speed)
 
-func _update_animation(dir: float) -> void:
+func is_skidding() -> bool:
+	var dir := Input.get_axis("move_left", "move_right")
+	return is_on_floor() and absf(velocity.x) > SKID_MIN_SPEED and dir != 0.0 \
+		and signf(dir) != signf(velocity.x)
+
+func _update_animation() -> void:
+	var skid := is_skidding()
+	_dust.emitting = skid
+	# Skid pose: face against the motion (toward input), like SMB's skid turn.
 	sprite.flip_h = facing < 0
 	if not is_on_floor():
+		sprite.speed_scale = 1.0
 		sprite.play("jump" if velocity.y < 0 else "fall")
-	elif absf(velocity.x) > 5.0:
+	elif skid:
+		sprite.speed_scale = 1.0
+		sprite.play("skid")
+	elif absf(velocity.x) > RUN_ANIM_MIN_SPEED:
 		sprite.play("run")
-		sprite.speed_scale = clampf(absf(velocity.x) / walk_speed, 0.6, 2.0)
+		sprite.speed_scale = clampf(absf(velocity.x) / walk_speed, RUN_ANIM_SCALE.x, RUN_ANIM_SCALE.y)
 	else:
+		sprite.speed_scale = 1.0
 		sprite.play("idle")
 
-func respawn() -> void:
+## Returns the puffin to spawn. `fell` = true for a pit death (emits `died`), false for an R reset.
+func respawn(fell: bool = true) -> void:
 	global_position = spawn_point
 	velocity = Vector2.ZERO
-	died.emit()
+	_jumping = false
+	_jump_cut_pending = false
+	_buffer = 0.0
+	_coyote = 0.0
+	if fell:
+		died.emit()
+	else:
+		reset.emit()

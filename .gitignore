@@ -5,5 +5,6 @@
 export_credentials.cfg
 *.tmp
 # Build output
-build/
+build/*
+!build/.gdignore
 .DS_Store
