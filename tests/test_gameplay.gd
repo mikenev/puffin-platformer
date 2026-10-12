@@ -156,5 +156,52 @@ func _run() -> void:
 	await frames(70)
 	ok(not P.is_invulnerable(), "respawn invulnerability ends after ~1.5 s")
 	e5.queue_free()
+	# Contact damage on a standing puffin (walker, crab, flyer) within 0.5 s
+	for kind in ["walker", "crab", "flyer"]:
+		await reset_at(Vector2(350, 183))
+		var e: Enemy = Flyer.new() if kind == "flyer" else Enemy.new()
+		if kind == "walker": e.look = "walker"
+		e.position = Vector2(372, 183 if kind == "flyer" else 192 - Enemy.SIZE.y / 2.0)
+		e.dir = -1
+		L.add_child(e)
+		var hit_at := -1
+		for i in 30:
+			await physics_frame
+			if P.is_dying():
+				hit_at = i
+				break
+		ok(hit_at >= 0, "standing puffin hurt by %s within 0.5 s (frame %d)" % [kind, hit_at])
+		ok(not e.is_on_wall() or kind == "flyer", "%s did not bump off the puffin" % kind)
+		e.queue_free()
+	# Enemy ledge probe ignores the puffin
+	await reset_at(Vector2(350, 183))
+	var le := Enemy.new(); le.speed = 0.0; le.dir = 1
+	le.position = Vector2(410, 192 - Enemy.SIZE.y / 2.0)
+	L.add_child(le)
+	await frames(2)
+	le.set_physics_process(false)  # freeze it facing the gap (it would turn around at the ledge)
+	le.dir = 1
+	ok(not le._floor_ahead(), "precondition: ledge probe sees the gap")
+	P.set_physics_process(false)
+	P.global_position = le.global_position + Vector2(Enemy.LEDGE_PROBE.x, Enemy.LEDGE_PROBE.y)
+	await frames(2)
+	ok(not le._floor_ahead(), "enemy ledge probe over the gap ignores a puffin there")
+	P.set_physics_process(true)
+	le.queue_free()
+	# #7's fish, checkpoint and goal still detect the puffin (player layer only)
+	await reset_at(Vector2(150, 183))
+	var sfish := FishPickup.new(); sfish.position = Vector2(180, 184); L.add_child(sfish)
+	var cp := Checkpoint.new(); cp.position = Vector2(210, 192); L.add_child(cp)
+	var goal := GoalFlag.new(); goal.position = Vector2(240, 192); L.add_child(goal)
+	var reached := [false]
+	goal.reached.connect(func(): reached[0] = true)
+	press("move_right")
+	await frames(90)
+	press("move_right", false)
+	ok(not is_instance_valid(sfish) or sfish.collected, "score fish collected")
+	ok(cp.active and absf(P.spawn_point.x - 210) < 1, "checkpoint activates and moves spawn")
+	ok(reached[0], "goal reached")
+	P.spawn_point = Vector2(24, 184)
+	goal.queue_free(); cp.queue_free()
 	print("RESULT: %d failures" % fails)
 	quit(1 if fails else 0)
